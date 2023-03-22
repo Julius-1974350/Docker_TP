@@ -1,0 +1,200 @@
+# ------------------------------------------------
+# Projet:   TP01
+# Cours:    420-4D4
+# Fichier:  docker-compose.yml - version de départ
+# Auteur: Julius Leblanc   
+# Date: 22-03-2023    
+# ------------------------------------------------
+# Description:
+# ------------------------------------------------
+# M-A-J:
+version: "3"
+services:
+  # ===========================================
+  # Le serveur de bases de données mariaDB
+  # # Service disponible sur le port 3307
+  # ===========================================
+  mariaDB:
+    image: mariadb
+    restart: always
+    container_name: mariaDB
+    networks: 
+      - reseauWP
+    environment:
+      - MARIADB_DATABASE=${MYSQL_DATABASE}
+      - MARIADB_USER=${MYSQL_USER}
+      - MARIADB_PASSORD=${MYSQL_PASSWORD}
+      - MARIADB_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./data:/var/lib/bdwp
+  # <-------------------------------------- FIN
+
+  
+  
+  # ==============================================
+  # Construction et démarrage du serveur Web,
+  # à partir des fichiers du dossier 'contenu-web'
+  # # Service disponible sur le port 80
+  # ==============================================
+  web:
+    image: nginx
+    networks: 
+      - reseauWP
+    build: ./contenu-web
+    ports:
+      - '80:80'
+  # <-------------------------------------- FIN
+
+
+
+  # ===========================================
+  # Construction et démarrage de WordPress
+  # Service disponible sur le port 88
+  # ===========================================
+
+    # Exemple d'utilisation des variables du fichier .env
+    #    environment:
+    #      - WORDPRESS_DB_HOST=${WP_HOST}
+    #      - WORDPRESS_DB_USER=${WP_USER}
+    #      - WORDPRESS_DB_PASSWORD=${WP_PASSWORD}
+    #      - WORDPRESS_DB_NAME=${WP_DB_NAME}
+  wordpress:
+    image: wordpress
+    networks: 
+      - reseauWP
+    restart: always
+    ports:
+      - '88:80'
+    environment:
+      - WORDPRESS_DB_HOST=${WP_HOST}
+      - WORDPRESS_DB_USER=${WP_USER}
+      - WORDPRESS_DB_PASSWORD=${WP_PASSWORD}
+      - WORDPRESS_DB_NAME=${WP_DB_NAME}
+  # <-------------------------------------- FIN
+
+
+
+  # ---- ZONE postgres + PMM
+  # ===========================================
+  # Le serveur d'activités percona PMM
+  # Service disponible sur le port 83
+  # ===========================================
+  pmm-data:
+    image: percona/pmm-server:latest
+    container_name: pmm-data
+    volumes:
+      - /postgres/prometheus/data:/opt/prometheus/data
+      - /postgres/consul-data:/opt/consul-data
+      - /postgres/mysql:/var/lib/mysql
+      - /postgres/grafana:/var/lib/grafana
+    entrypoint: /bin/true
+  pmm-server:
+    image: percona/pmm-server:latest
+    container_name: pmm-server
+    ports:
+      - '83:80'
+    restart: always
+    environment:
+      - SERVER_USER=${PMM_USER}
+      - SERVER_PASSWORD=${PMM_PASS}
+      - METRICS_RETENTION=720h
+      - METRICS_MEMORY=4194304
+      - METRICS_RESOLUTION=1s
+      - QUERIES_RETENTION=30
+    volumes_from:
+      - pmm-data
+  # <-------------------------------------- FIN
+
+  # ===========================================
+  # Le serveur de base de données postgres
+  # Service disponible sur le port 5432
+  # ===========================================
+  postgres:
+    image: postgres
+    container_name: postgres
+    restart: always
+    networks: 
+      - reseauPMM
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  # <-------------------------------------- FIN
+
+  
+  
+  # ===========================================
+  # Démarrage de postgresAdmin
+  # Service disponible sur le port 81
+  # ===========================================
+  postgresAdmin:
+    image: dpage/pgadmin4
+    restart: always
+    networks: 
+      - reseauPMM
+    depends_on:
+      - postgres
+    ports:
+      - 81:80
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+  # <-------------------------------------- FIN
+
+
+
+  # ================================================
+  # Le client PMM pour la base de données postgress
+  # ATTENTION:  Cette solution ne fonctionne pas!!!
+  # À vous de trouver la bonne solution ...+
+  # ================================================
+  pmm-client-postgres:
+    image: "perconalab/pmm-client:dev-latest"
+    container_name: pmm-client-postgres
+    depends_on:
+      - pmm-server
+      - postgres
+    environment:
+      - PMM_SERVER=pmm-server:443
+      - PMM_USER=${POSTGRES_USER}
+      - PMM_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_TYPE=postgresql
+      - DB_HOST=postgres
+      - DB_PORT=443
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+  # <-------------------------------------- FIN
+
+
+
+  # ===========================================
+  # Démarrage de phpMyAdmin
+  # Service disponible sur le port 82
+  # ===========================================
+    # NOTE: Il ne faut pas utiliser la méthode: PMA_ARBITRARY=1
+  phpmyadmin:
+    image: phpmyadmin
+    restart: always
+    networks: 
+      - reseauWP
+    ports:
+      - 82:82
+    environment:
+      - PMA_HOST=${MYSQL_DATABASE}
+      - PMA_PORT=3307
+      - PMA_USER=${MYSQL_USER}
+      - PMA_PASSWORD=${MYSQL_PASSWORD}
+  # <-------------------------------------- FIN
+
+
+
+# ===========================================
+# Les réseaux de l'application
+# ===========================================
+networks:
+  reseauWP:
+    name: reseauWP
+    driver: bridge
+  reseauPMM:
+    name: reseauPMM
+    driver: bridge
+# <-------------------------------------- FIN
