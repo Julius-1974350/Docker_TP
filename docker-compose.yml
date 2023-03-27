@@ -17,8 +17,9 @@ services:
   mariaDB:
     image: mariadb
     restart: always
+    command: --default-authentication-plugin=mysql_native_password
     container_name: mariaDB
-    networks: 
+    networks:
       - reseauWP
     environment:
       - MARIADB_DATABASE=${MYSQL_DATABASE}
@@ -29,8 +30,8 @@ services:
       - ./data:/var/lib/bdwp
   # <-------------------------------------- FIN
 
-  
-  
+
+
   # ==============================================
   # Construction et démarrage du serveur Web,
   # à partir des fichiers du dossier 'contenu-web'
@@ -38,19 +39,19 @@ services:
   # ==============================================
   web:
     image: nginx
-    networks: 
+    networks:
       - reseauWP
     build: ./contenu-web
     ports:
       - '80:80'
-  # <-------------------------------------- FIN
+    # <-------------------------------------- FIN
 
 
 
-  # ===========================================
-  # Construction et démarrage de WordPress
-  # Service disponible sur le port 88
-  # ===========================================
+    # ===========================================
+    # Construction et démarrage de WordPress
+    # Service disponible sur le port 88
+    # ===========================================
 
     # Exemple d'utilisation des variables du fichier .env
     #    environment:
@@ -60,9 +61,10 @@ services:
     #      - WORDPRESS_DB_NAME=${WP_DB_NAME}
   wordpress:
     image: wordpress
-    networks: 
+    networks:
       - reseauWP
     restart: always
+    build: ./wordpress
     ports:
       - '88:80'
     environment:
@@ -113,15 +115,15 @@ services:
     image: postgres
     container_name: postgres
     restart: always
-    networks: 
+    networks:
       - reseauPMM
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
   # <-------------------------------------- FIN
 
-  
-  
+
+
   # ===========================================
   # Démarrage de postgresAdmin
   # Service disponible sur le port 81
@@ -129,7 +131,7 @@ services:
   postgresAdmin:
     image: dpage/pgadmin4
     restart: always
-    networks: 
+    networks:
       - reseauPMM
     depends_on:
       - postgres
@@ -162,34 +164,32 @@ services:
       - DB_PORT=443
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
-  # <-------------------------------------- FIN
+    # <-------------------------------------- FIN
 
 
 
-  # ===========================================
-  # Démarrage de phpMyAdmin
-  # Service disponible sur le port 82
-  # ===========================================
+    # ===========================================
+    # Démarrage de phpMyAdmin
+    # Service disponible sur le port 82
+    # ===========================================
     # NOTE: Il ne faut pas utiliser la méthode: PMA_ARBITRARY=1
   phpmyadmin:
     image: phpmyadmin
     restart: always
-    networks: 
+    networks:
       - reseauWP
     ports:
-      - 82:82
+      - 82:80
     environment:
-      - PMA_HOST=${MYSQL_DATABASE}
-      - PMA_PORT=3307
-      - PMA_USER=${MYSQL_USER}
-      - PMA_PASSWORD=${MYSQL_PASSWORD}
+      - PMA_HOST=mariaDB
+      - PMA_USER=root
+      - PMA_PASSWORD=${MYSQL_ROOT_PASSWORD}
   # <-------------------------------------- FIN
 
 
-
-# ===========================================
-# Les réseaux de l'application
-# ===========================================
+  # ===========================================
+  # Les réseaux de l'application
+  # ===========================================
 networks:
   reseauWP:
     name: reseauWP
@@ -197,4 +197,5 @@ networks:
   reseauPMM:
     name: reseauPMM
     driver: bridge
+
 # <-------------------------------------- FIN
