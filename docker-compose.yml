@@ -14,20 +14,21 @@ services:
   # Le serveur de bases de données mariaDB
   # # Service disponible sur le port 3307
   # ===========================================
-  mariaDB:
-    image: mariadb
+  mariadb:
+    image: mariadb:11.0.1-rc-jammy
     restart: always
-    command: --default-authentication-plugin=mysql_native_password
-    container_name: mariaDB
+    container_name: mariadb
     networks:
       - reseauWP
+    ports:
+      - 3307:3306
     environment:
-      - MARIADB_DATABASE=${MYSQL_DATABASE}
-      - MARIADB_USER=${MYSQL_USER}
-      - MARIADB_PASSORD=${MYSQL_PASSWORD}
-      - MARIADB_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
     volumes:
-      - ./data:/var/lib/bdwp
+      - ./bdwp:/var/lib/mysql
   # <-------------------------------------- FIN
 
 
@@ -41,6 +42,7 @@ services:
     image: nginx
     networks:
       - reseauWP
+    container_name: web
     build: ./contenu-web
     ports:
       - '80:80'
@@ -65,6 +67,9 @@ services:
       - reseauWP
     restart: always
     build: ./wordpress
+    container_name: wordpress
+    depends_on:
+      - mariadb
     ports:
       - '88:80'
     environment:
@@ -72,30 +77,24 @@ services:
       - WORDPRESS_DB_USER=${WP_USER}
       - WORDPRESS_DB_PASSWORD=${WP_PASSWORD}
       - WORDPRESS_DB_NAME=${WP_DB_NAME}
-  # <-------------------------------------- FIN
+      - WORDPRESS_TABLE_PREFIX=1974350_
+      # <-------------------------------------- FIN
 
 
 
-  # ---- ZONE postgres + PMM
-  # ===========================================
-  # Le serveur d'activités percona PMM
-  # Service disponible sur le port 83
-  # ===========================================
-  pmm-data:
-    image: percona/pmm-server:latest
-    container_name: pmm-data
-    volumes:
-      - /postgres/prometheus/data:/opt/prometheus/data
-      - /postgres/consul-data:/opt/consul-data
-      - /postgres/mysql:/var/lib/mysql
-      - /postgres/grafana:/var/lib/grafana
-    entrypoint: /bin/true
+      # ---- ZONE postgres + PMM
+      # ===========================================
+      # Le serveur d'activités percona PMM
+      # Service disponible sur le port 83
+      # ===========================================
   pmm-server:
-    image: percona/pmm-server:latest
+    image: percona/pmm-server:2.36.0
     container_name: pmm-server
     ports:
       - '83:80'
     restart: always
+    networks:
+      - reseauPMM
     environment:
       - SERVER_USER=${PMM_USER}
       - SERVER_PASSWORD=${PMM_PASS}
@@ -103,16 +102,16 @@ services:
       - METRICS_MEMORY=4194304
       - METRICS_RESOLUTION=1s
       - QUERIES_RETENTION=30
-    volumes_from:
-      - pmm-data
-  # <-------------------------------------- FIN
+    volumes:
+      - ./pmm-data:/srv
+    # <-------------------------------------- FIN
 
-  # ===========================================
-  # Le serveur de base de données postgres
-  # Service disponible sur le port 5432
-  # ===========================================
+    # ===========================================
+    # Le serveur de base de données postgres
+    # Service disponible sur le port 5432
+    # ===========================================
   postgres:
-    image: postgres
+    image: postgres:15.2
     container_name: postgres
     restart: always
     networks:
@@ -129,8 +128,9 @@ services:
   # Service disponible sur le port 81
   # ===========================================
   postgresAdmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:6
     restart: always
+    container_name: postgresAdmin
     networks:
       - reseauPMM
     depends_on:
@@ -150,11 +150,13 @@ services:
   # À vous de trouver la bonne solution ...+
   # ================================================
   pmm-client-postgres:
-    image: "perconalab/pmm-client:dev-latest"
+    image: perconalab/pmm-client:dev-latest
     container_name: pmm-client-postgres
     depends_on:
       - pmm-server
       - postgres
+    networks:
+      - reseauPMM
     environment:
       - PMM_SERVER=pmm-server:443
       - PMM_USER=${POSTGRES_USER}
@@ -174,14 +176,17 @@ services:
     # ===========================================
     # NOTE: Il ne faut pas utiliser la méthode: PMA_ARBITRARY=1
   phpmyadmin:
-    image: phpmyadmin
+    image: phpmyadmin:5.2.1
     restart: always
+    container_name: phpMyAdmin
     networks:
       - reseauWP
     ports:
       - 82:80
+    depends_on:
+      - mariadb
     environment:
-      - PMA_HOST=mariaDB
+      - PMA_HOST=mariadb
       - PMA_USER=root
       - PMA_PASSWORD=${MYSQL_ROOT_PASSWORD}
   # <-------------------------------------- FIN
